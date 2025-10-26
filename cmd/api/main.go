@@ -11,32 +11,46 @@ import (
 	"time"
 	"urlChecker/internal/application/service"
 	httpInfra "urlChecker/internal/infrastructure/http"
+	"urlChecker/internal/infrastructure/logger"
 	"urlChecker/internal/infrastructure/repository"
 	"urlChecker/internal/interface/api"
 )
 
 func main() {
-	// Инициализация слоев
-	repo := repository.NewMemoryRepository()
+
+	dbPath := "./data/monitors.db"
+
+	os.MkdirAll("./data", 0755)
+
+	// repo := repository.NewMemoryRepository()
+	repo, err := repository.NewSQLiteRepository(dbPath)
+	if err != nil {
+		log.Fatalf("Failed to init repository: %v", err)
+	}
+	defer repo.Close()
+
+	fileLogger, err := logger.NewFileLogger("./logs")
+	if err != nil {
+		log.Fatalf("Failed to init logger: %v", err)
+	}
+	defer fileLogger.Close()
+
 	monitorService := service.NewMonitorService(repo)
-	checkerService := service.NewCheckerService(repo)
+	checkerService := service.NewCheckerService(repo, fileLogger)
 	handler := api.NewHandler(monitorService)
 	router := httpInfra.NewRouter(handler)
 
-	// HTTP сервер
+	// HTTP server
 	server := &http.Server{
 		Addr:    ":8080",
 		Handler: router,
 	}
 
-	// Контекст для graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Запуск checker service в отдельной goroutine
 	go checkerService.Start(ctx)
 
-	// Запуск HTTP сервера в отдельной goroutine
 	go func() {
 		fmt.Println("Server started on http://localhost:8080")
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -44,7 +58,6 @@ func main() {
 		}
 	}()
 
-	// Ожидание сигнала завершения
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit

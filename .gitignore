@@ -1,0 +1,19 @@
+.idea
+data/
+logs/
+*.db
+*.log
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Build output
+bin/
+dist/
+build/
+
+# Temporary files
+tmp/
+temp/

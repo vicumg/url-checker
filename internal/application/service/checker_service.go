@@ -8,14 +8,20 @@ import (
 	"urlChecker/internal/domain/monitor"
 )
 
+type Logger interface {
+	LogCheck(monitorID, url string, statusCode int, responseTime time.Duration, err error)
+}
+
 type CheckerService struct {
 	repo   monitor.Repository
 	client *http.Client
+	logger Logger
 }
 
-func NewCheckerService(repo monitor.Repository) *CheckerService {
+func NewCheckerService(repo monitor.Repository, logger Logger) *CheckerService {
 	return &CheckerService{
-		repo: repo,
+		repo:   repo,
+		logger: logger,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -57,14 +63,17 @@ func (s *CheckerService) checkAllMonitors() {
 }
 
 func (s *CheckerService) checkURL(m *monitor.URLMonitor) {
+	start := time.Now()
 	resp, err := s.client.Get(m.URL)
+	responseTime := time.Since(start)
+
 	now := time.Now()
 	m.LastChecked = &now
 
 	if err != nil {
-		log.Printf("[%s] Error checking %s: %v", m.ID, m.URL, err)
+		s.logger.LogCheck(m.ID, m.URL, 0, responseTime, err)
 	} else {
-		log.Printf("[%s] Checked %s - Status: %d", m.ID, m.URL, resp.StatusCode)
+		s.logger.LogCheck(m.ID, m.URL, resp.StatusCode, responseTime, nil)
 		resp.Body.Close()
 	}
 
